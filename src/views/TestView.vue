@@ -89,7 +89,7 @@ function jumpToGrid(index: number) {
 </script>
 
 <template>
-  <main class="min-h-screen bg-primary-light/40 pb-28">
+  <main class="min-h-screen bg-primary-light/40 pb-10">
     <header class="sticky top-0 z-10 border-b border-primary/10 bg-white/95 backdrop-blur">
       <div class="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <div class="flex items-center gap-3">
@@ -149,15 +149,17 @@ function jumpToGrid(index: number) {
           </button>
         </div>
       </article>
-    </div>
 
-    <footer class="fixed inset-x-0 mb-80 bottom-0 z-10 border-t border-primary/10 backdrop-blur">
-      <div class="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <div class="mt-5 flex items-center justify-between gap-3">
         <AppButton variant="secondary" :disabled="currentIndex === 0" @click="previous">Previous</AppButton>
         <AppButton v-if="currentIndex < totalQuestions - 1" @click="next">Next</AppButton>
         <AppButton v-else variant="primary" @click="showSubmitConfirm = true">Submit Test</AppButton>
       </div>
-    </footer>
+
+      <p v-if="result.violationCount > 0" class="mt-3 text-center text-xs font-medium text-warning">
+        {{ result.violationCount }}/{{ MAX_VIOLATIONS }} warnings recorded
+      </p>
+    </div>
 
     <!-- Question navigation drawer -->
     <Transition name="fade">
@@ -242,10 +244,6 @@ function jumpToGrid(index: number) {
         </div>
       </div>
     </div>
-
-    <p v-if="result.violationCount > 0" class="fixed bottom-20 left-1/2 -translate-x-1/2 text-xs font-medium text-warning">
-      {{ result.violationCount }}/{{ MAX_VIOLATIONS }} warnings recorded
-    </p>
   </main>
 </template>
 
