@@ -1,91 +1,55 @@
 rules_version = '2';
 
+// ⚠ Firestore-only authentication (no Firebase Auth).
+// There is no request.auth in this app at all, so these rules cannot verify
+// *who* is asking — only *what shape* of request is being made. That is a
+// deliberate, explicitly-accepted trade-off (see project conversation) in
+// exchange for skipping Firebase Auth setup. Concretely:
+//   - `students` / `admins`: get-only, list disabled — a client can fetch
+//     one doc by a username it already knows (that's how login works) but
+//     cannot enumerate/dump the whole roster of usernames+passwords+tokens
+//     in a single query.
+//   - `results` (and its subcollections) and `settings/testConfig`: fully
+//     open read/write. This is unavoidable under this model because the
+//     admin dashboard needs to `list` every student's result, and there is
+//     no way to distinguish "the admin dashboard" from "any other visitor"
+//     without an auth token. Anyone with the deployed URL can read every
+//     student's score/status/violations via the Firestore SDK directly, and
+//     — since nothing can verify identity — could in principle also write
+//     to another student's result doc from devtools.
+// To close this gap later, the fix is to reintroduce Firebase Auth (the
+// app's git history has a version wired for it) or move result writes
+// behind a Cloud Function.
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() {
-      return request.auth != null;
+    match /students/{username} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false; // only the Admin SDK seed script writes here
     }
 
-    function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    match /admins/{username} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false; // only the Admin SDK seed script writes here
     }
 
-    function isOwner(studentId) {
-      return isSignedIn() && request.auth.uid == studentId;
-    }
-
-    // --- students/{studentId} ---
-    // Written only by the Admin SDK seed script. Clients may only read their
-    // own profile (name/class/session/username/personalToken) to display the
-    // identity-confirm screen and validate the token gate.
-    match /students/{studentId} {
-      allow read: if isOwner(studentId) || isAdmin();
-      allow write: if false;
-    }
-
-    // --- admins/{uid} ---
-    // Membership marker only, written by the seed script. A signed-in user
-    // may read their own doc to know whether they're an admin.
-    match /admins/{uid} {
-      allow read: if isSignedIn() && request.auth.uid == uid;
-      allow write: if false;
-    }
-
-    // --- settings/testConfig ---
-    // Any signed-in user may read (a student reads it once, at test start, to
-    // lock in their own durationMinutes). Only admins may change it.
     match /settings/testConfig {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
 
-    // --- results/{studentId} ---
     match /results/{studentId} {
-      allow read: if isOwner(studentId) || isAdmin();
+      allow read, write: if true;
 
-      // First-touch default doc, created client-side if the seed script somehow
-      // missed a student. Must match the untouched "not started" shape.
-      allow create: if isOwner(studentId)
-        && request.resource.data.status == 'not_started'
-        && request.resource.data.violationCount == 0
-        && request.resource.data.flaggedForCheating == false;
-
-      // A student may only update their own doc, only while it isn't already
-      // completed (locked), and only through the specific transitions the app
-      // makes: starting the test, moving between questions, submitting, or a
-      // proctoring violation (which itself may transition status->completed).
-      allow update: if isAdmin() || (
-        isOwner(studentId)
-        && resource.data.status != 'completed'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'currentQuestionIndex', 'startedAt', 'completedAt',
-          'score', 'testStartTimestamp', 'durationMinutes',
-          'violationCount', 'flaggedForCheating'
-        ])
-        // violationCount may only ever go up, one at a time
-        && request.resource.data.violationCount >= resource.data.violationCount
-        && request.resource.data.violationCount <= resource.data.violationCount + 1
-        // once flagged, stays flagged — never cleared by a client write
-        && (resource.data.flaggedForCheating == false || request.resource.data.flaggedForCheating == true)
-      );
-
-      allow delete: if isAdmin();
-
-      // --- results/{studentId}/answers/{questionNumber} ---
       match /answers/{questionNumber} {
-        allow read: if isOwner(studentId) || isAdmin();
-        allow write: if isOwner(studentId)
-          && get(/databases/$(database)/documents/results/$(studentId)).data.status != 'completed'
-          && request.resource.data.selectedAnswer in ['A', 'B', 'C', 'D'];
+        allow read, write: if true;
       }
 
-      // --- results/{studentId}/violations/{violationId} ---
-      // Append-only audit trail — no student can edit or delete a past entry.
       match /violations/{violationId} {
-        allow read: if isOwner(studentId) || isAdmin();
-        allow create: if isOwner(studentId) && request.resource.data.type in ['tab_switch', 'window_blur'];
-        allow update, delete: if false;
+        allow read, create: if true;
+        allow update, delete: if false; // keep the audit log append-only
       }
     }
   }

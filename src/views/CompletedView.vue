@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth';
 
 const auth = useAuthStore();
 const router = useRouter();
-const { result, totalQuestions } = useTestSession();
+const { result } = useTestSession();
 
 async function signOut() {
   await auth.logout();
@@ -38,16 +38,13 @@ async function signOut() {
         </p>
       </template>
 
-      <dl class="mt-6 grid grid-cols-2 gap-3">
-        <div class="rounded-xl bg-primary-light/70 p-3">
-          <dt class="text-xs font-medium uppercase tracking-wide text-primary-dark/70">Score</dt>
-          <dd class="text-xl font-bold text-slate-900">{{ result.score ?? '—' }} / {{ totalQuestions }}</dd>
-        </div>
+      <dl class="mt-6">
         <div class="rounded-xl bg-primary-light/70 p-3">
           <dt class="text-xs font-medium uppercase tracking-wide text-primary-dark/70">Warnings</dt>
           <dd class="text-xl font-bold text-slate-900">{{ result.violationCount }}</dd>
         </div>
       </dl>
+      <p class="mt-3 text-xs text-slate-400">Your score has been recorded and will be shared by your teacher.</p>
 
       <AppButton class="mt-6" full-width variant="secondary" @click="signOut">Sign out</AppButton>
     </div>

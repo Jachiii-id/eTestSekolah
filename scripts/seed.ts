@@ -5,10 +5,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { type App, cert, getApps, initializeApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { getFirestore } from 'firebase-admin/firestore';
 
-import { AUTH_EMAIL_DOMAIN, DEFAULT_DURATION_MINUTES, usernameToEmail } from '../src/constants';
+import { DEFAULT_DURATION_MINUTES } from '../src/constants';
 import { SEED_ACCOUNTS } from './data/students.seed';
 
 const serviceAccountPath = resolve(process.cwd(), process.env.SEED_SERVICE_ACCOUNT_PATH ?? './service-account.json');
@@ -23,7 +22,6 @@ if (!existsSync(serviceAccountPath)) {
 const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
 
 const app: App = getApps()[0] ?? initializeApp({ credential: cert(serviceAccount) });
-const auth = getAuth(app);
 const db = getFirestore(app);
 
 const PW_CHARS = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -34,38 +32,27 @@ function randomPassword(len = 12): string {
   return out;
 }
 
-async function upsertAuthUser(uid: string, email: string, password: string): Promise<void> {
-  try {
-    await auth.updateUser(uid, { email, password, disabled: false });
-  } catch (err: unknown) {
-    if ((err as { code?: string }).code === 'auth/user-not-found') {
-      await auth.createUser({ uid, email, password, emailVerified: true, disabled: false });
-    } else {
-      throw err;
-    }
-  }
-}
-
 async function seedStudents(): Promise<void> {
-  console.log(`Seeding ${SEED_ACCOUNTS.length} student accounts (domain: ${AUTH_EMAIL_DOMAIN})…`);
+  console.log(`Seeding ${SEED_ACCOUNTS.length} student accounts (Firestore-only auth, keyed by username)…`);
 
   for (const account of SEED_ACCOUNTS) {
-    const email = usernameToEmail(account.username);
-    await upsertAuthUser(account.studentId, email, account.password);
+    const docId = account.username;
 
-    await db.doc(`students/${account.studentId}`).set(
+    await db.doc(`students/${docId}`).set(
       {
+        studentId: account.studentId,
         name: account.name,
         class: account.class,
         session: account.session,
         username: account.username,
+        password: account.password,
         personalToken: account.personalToken,
         isTestAccount: account.isTestAccount,
       },
       { merge: true },
     );
 
-    const resultRef = db.doc(`results/${account.studentId}`);
+    const resultRef = db.doc(`results/${docId}`);
     const resultSnap = await resultRef.get();
     if (!resultSnap.exists) {
       await resultRef.set({
@@ -78,10 +65,11 @@ async function seedStudents(): Promise<void> {
         durationMinutes: null,
         violationCount: 0,
         flaggedForCheating: false,
+        optionOrder: null,
       });
     }
 
-    console.log(`  ✓ ${account.studentId}  ${account.name}  (${email})`);
+    console.log(`  ✓ ${docId}  ${account.name}`);
   }
 }
 
@@ -91,7 +79,7 @@ async function seedTestConfig(): Promise<void> {
   if (!snap.exists) {
     await configRef.set({
       durationMinutes: DEFAULT_DURATION_MINUTES,
-      updatedAt: FieldValue.serverTimestamp(),
+      updatedAt: Date.now(),
       updatedBy: 'seed-script',
     });
     console.log(`Created settings/testConfig with durationMinutes=${DEFAULT_DURATION_MINUTES}`);
@@ -101,22 +89,21 @@ async function seedTestConfig(): Promise<void> {
 }
 
 async function seedAdmin(): Promise<void> {
-  const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@etest-labschool.local';
-  const existing = await auth.getUserByEmail(adminEmail).catch(() => null);
-  if (existing) {
-    await db.doc(`admins/${existing.uid}`).set({ email: adminEmail }, { merge: true });
-    console.log(`Admin account already exists: ${adminEmail} (uid: ${existing.uid}) — left password unchanged.`);
+  const adminUsername = process.env.SEED_ADMIN_USERNAME ?? 'admin';
+  const adminRef = db.doc(`admins/${adminUsername}`);
+  const existing = await adminRef.get();
+  if (existing.exists) {
+    console.log(`Admin account already exists: ${adminUsername} — left password unchanged.`);
     return;
   }
 
   const password = process.env.SEED_ADMIN_PASSWORD ?? randomPassword();
-  const user = await auth.createUser({ email: adminEmail, password, emailVerified: true });
-  await db.doc(`admins/${user.uid}`).set({ email: adminEmail });
+  await adminRef.set({ username: adminUsername, password });
 
   console.log('\n=== ADMIN ACCOUNT CREATED — SAVE THESE CREDENTIALS NOW ===');
-  console.log(`  Email:    ${adminEmail}`);
+  console.log(`  Username: ${adminUsername}`);
   console.log(`  Password: ${password}`);
-  console.log('  Change this password after first login.');
+  console.log('  Change this password (edit the Firestore doc) after first login.');
   console.log('============================================================\n');
 }
 

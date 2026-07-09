@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { nextTick, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import AppButton from '@/components/AppButton.vue';
 import { MAX_VIOLATIONS } from '@/constants';
 import { useProctoring } from '@/composables/useProctoring';
 import { useTestSession } from '@/composables/useTestSession';
-import type { AnswerLetter } from '@/types';
 
 const router = useRouter();
 const {
@@ -17,6 +16,7 @@ const {
   currentIndex,
   currentQuestion,
   currentAnswer,
+  currentOptions,
   answeredCount,
   progressPercent,
   timeRemainingLabel,
@@ -44,8 +44,6 @@ watch(
   { immediate: true },
 );
 
-const letters: AnswerLetter[] = ['A', 'B', 'C', 'D'];
-
 async function confirmSubmit() {
   submitting.value = true;
   try {
@@ -55,16 +53,61 @@ async function confirmSubmit() {
     showSubmitConfirm.value = false;
   }
 }
+
+// Question navigation lives behind a hamburger drawer so the test itself
+// stays a full, uncluttered single column — nothing but the question.
+const navOpen = ref(false);
+const jumpInput = ref<HTMLInputElement | null>(null);
+const jumpToValue = ref('');
+const jumpError = ref(false);
+
+function openNav() {
+  navOpen.value = true;
+  nextTick(() => jumpInput.value?.focus());
+}
+
+function closeNav() {
+  navOpen.value = false;
+  jumpError.value = false;
+  jumpToValue.value = '';
+}
+
+function jumpToQuestion() {
+  const n = Number(jumpToValue.value);
+  if (!Number.isInteger(n) || n < 1 || n > totalQuestions) {
+    jumpError.value = true;
+    return;
+  }
+  goToIndex(n - 1);
+  closeNav();
+}
+
+function jumpToGrid(index: number) {
+  goToIndex(index);
+  closeNav();
+}
 </script>
 
 <template>
   <main class="min-h-screen bg-primary-light/40 pb-28">
     <header class="sticky top-0 z-10 border-b border-primary/10 bg-white/95 backdrop-blur">
-      <div class="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
-        <div>
-          <p class="text-xs font-medium text-slate-400">Question {{ currentIndex + 1 }} / {{ totalQuestions }}</p>
-          <div class="mt-1 h-1.5 w-32 overflow-hidden rounded-full bg-primary/10 sm:w-48">
-            <div class="h-full rounded-full bg-primary transition-all" :style="{ width: progressPercent + '%' }" />
+      <div class="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-primary-light hover:text-primary-dark"
+            aria-label="Open question navigation"
+            @click="openNav"
+          >
+            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <div>
+            <p class="text-xs font-medium text-slate-400">Question {{ currentIndex + 1 }} / {{ totalQuestions }}</p>
+            <div class="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-primary/10 sm:w-48">
+              <div class="h-full rounded-full bg-primary transition-all" :style="{ width: progressPercent + '%' }" />
+            </div>
           </div>
         </div>
         <div
@@ -76,66 +119,108 @@ async function confirmSubmit() {
       </div>
     </header>
 
-    <div class="mx-auto max-w-3xl px-4 py-6">
-      <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-primary/10">
+    <div class="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+      <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-primary/10 sm:p-8">
         <p class="text-xs font-semibold uppercase tracking-wide text-primary-dark">
           Question {{ currentQuestion.number }}
         </p>
         <h2 class="mt-2 text-base font-semibold text-slate-900 sm:text-lg">{{ currentQuestion.text }}</h2>
 
-        <div class="mt-5 space-y-2.5">
+        <div class="mt-6 space-y-2.5">
           <button
-            v-for="letter in letters"
-            :key="letter"
+            v-for="opt in currentOptions"
+            :key="opt.position"
             type="button"
             class="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm font-medium transition-colors"
             :class="
-              currentAnswer === letter
+              currentAnswer === opt.originalLetter
                 ? 'border-primary bg-primary-light text-primary-dark'
                 : 'border-slate-200 text-slate-700 hover:border-primary/40 hover:bg-primary-light/50'
             "
-            @click="selectAnswer(letter)"
+            @click="selectAnswer(opt.originalLetter)"
           >
             <span
               class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-bold"
-              :class="currentAnswer === letter ? 'border-primary bg-primary text-white' : 'border-slate-300 text-slate-500'"
+              :class="currentAnswer === opt.originalLetter ? 'border-primary bg-primary text-white' : 'border-slate-300 text-slate-500'"
             >
-              {{ letter }}
+              {{ opt.position }}
             </span>
-            <span>{{ currentQuestion.options[letter] }}</span>
+            <span>{{ opt.text }}</span>
           </button>
         </div>
       </article>
-
-      <nav class="mt-5 grid grid-cols-8 gap-1.5 sm:grid-cols-10">
-        <button
-          v-for="q in questions"
-          :key="q.number"
-          type="button"
-          class="aspect-square rounded-md text-xs font-semibold transition-colors"
-          :class="[
-            q.number - 1 === currentIndex
-              ? 'bg-primary text-white'
-              : isAnswered(q.number)
-                ? 'bg-primary-light text-primary-dark'
-                : 'bg-white text-slate-400 ring-1 ring-slate-200',
-          ]"
-          @click="goToIndex(q.number - 1)"
-        >
-          {{ q.number }}
-        </button>
-      </nav>
-
-      <p class="mt-3 text-center text-xs text-slate-400">{{ answeredCount }} / {{ totalQuestions }} answered</p>
     </div>
 
-    <footer class="fixed inset-x-0 bottom-0 z-10 border-t border-primary/10 bg-white/95 backdrop-blur">
-      <div class="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
+    <footer class="fixed inset-x-0 mb-80 bottom-0 z-10 border-t border-primary/10 backdrop-blur">
+      <div class="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <AppButton variant="secondary" :disabled="currentIndex === 0" @click="previous">Previous</AppButton>
         <AppButton v-if="currentIndex < totalQuestions - 1" @click="next">Next</AppButton>
         <AppButton v-else variant="primary" @click="showSubmitConfirm = true">Submit Test</AppButton>
       </div>
     </footer>
+
+    <!-- Question navigation drawer -->
+    <Transition name="fade">
+      <div v-if="navOpen" class="fixed inset-0 z-30 bg-slate-900/50" @click="closeNav" />
+    </Transition>
+    <Transition name="slide">
+      <aside
+        v-if="navOpen"
+        class="fixed inset-y-0 left-0 z-40 flex w-[85vw] max-w-sm flex-col bg-white shadow-xl sm:w-80"
+      >
+        <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3.5">
+          <h3 class="text-sm font-bold text-slate-900">Question navigation</h3>
+          <button
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Close"
+            @click="closeNav"
+          >
+            &times;
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-4 py-4">
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Jump to question</p>
+          <form class="mt-2 flex gap-2" @submit.prevent="jumpToQuestion">
+            <input
+              ref="jumpInput"
+              v-model="jumpToValue"
+              type="number"
+              min="1"
+              :max="totalQuestions"
+              placeholder="#"
+              class="w-20 rounded-lg border border-slate-300 px-2.5 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+              :class="jumpError ? 'border-danger' : ''"
+            />
+            <AppButton type="submit" variant="secondary">Go</AppButton>
+          </form>
+          <p v-if="jumpError" class="mt-1.5 text-xs text-danger">Enter a number between 1 and {{ totalQuestions }}.</p>
+
+          <p class="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">All questions</p>
+          <nav class="mt-2 grid grid-cols-6 gap-1.5 sm:grid-cols-7">
+            <button
+              v-for="q in questions"
+              :key="q.number"
+              type="button"
+              class="aspect-square rounded-md text-xs font-semibold transition-colors"
+              :class="[
+                q.number - 1 === currentIndex
+                  ? 'bg-primary text-white'
+                  : isAnswered(q.number)
+                    ? 'bg-primary-light text-primary-dark'
+                    : 'bg-white text-slate-400 ring-1 ring-slate-200',
+              ]"
+              @click="jumpToGrid(q.number - 1)"
+            >
+              {{ q.number }}
+            </button>
+          </nav>
+
+          <p class="mt-3 text-center text-xs text-slate-400">{{ answeredCount }} / {{ totalQuestions }} answered</p>
+        </div>
+      </aside>
+    </Transition>
 
     <div
       v-if="showSubmitConfirm"
@@ -163,3 +248,23 @@ async function confirmSubmit() {
     </p>
   </main>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform 0.25s ease;
+}
+.slide-enter-from,
+.slide-leave-to {
+  transform: translateX(-100%);
+}
+</style>

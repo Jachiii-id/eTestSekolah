@@ -4,20 +4,28 @@ import { useRouter } from 'vue-router';
 
 import AppButton from '@/components/AppButton.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
+import StudentResultModal from '@/components/StudentResultModal.vue';
 import ViolationList from '@/components/ViolationList.vue';
-import { DEFAULT_DURATION_MINUTES, TOTAL_QUESTIONS } from '@/constants';
+import { DEFAULT_DURATION_MINUTES } from '@/constants';
+import { useToasts } from '@/composables/useToasts';
+import { resetResultForAdmin } from '@/firebase/results';
 import { subscribeTestConfig, updateTestConfig } from '@/firebase/settings';
+import { exportResultsToPdf } from '@/lib/exportPdf';
+import type { AdminRow } from '@/stores/admin';
 import { useAdminStore } from '@/stores/admin';
 import { useAuthStore } from '@/stores/auth';
 
 const auth = useAuthStore();
 const router = useRouter();
 const admin = useAdminStore();
+const { pushToast } = useToasts();
 
 const activeTab = ref<'results' | 'settings'>('results');
 const sessionFilter = ref<'all' | 'Session 1' | 'Session 2'>('all');
 const flaggedOnly = ref(false);
-const showTestAccount = ref(false);
+// Visible by default so the dummy test account (used to dry-run the flow) is
+// easy to find and reset without hunting for a checkbox first.
+const showTestAccount = ref(true);
 const search = ref('');
 const expandedId = ref<string | null>(null);
 
@@ -60,6 +68,49 @@ function toggleExpand(studentId: string) {
   expandedId.value = expandedId.value === studentId ? null : studentId;
 }
 
+function downloadPdf() {
+  const parts: string[] = [sessionFilter.value === 'all' ? 'All sessions' : sessionFilter.value];
+  if (flaggedOnly.value) parts.push('flagged only');
+  if (search.value.trim()) parts.push(`search "${search.value.trim()}"`);
+  exportResultsToPdf(filteredRows.value, parts.join(', '));
+  pushToast(`Downloaded PDF for ${filteredRows.value.length} student(s).`, 'info');
+}
+
+// --- View result ---
+const viewTarget = ref<AdminRow | null>(null);
+
+function requestView(row: AdminRow) {
+  viewTarget.value = row;
+}
+
+// --- Reset test ---
+const resetTarget = ref<AdminRow | null>(null);
+const resetting = ref(false);
+
+function requestReset(row: AdminRow) {
+  resetTarget.value = row;
+}
+
+function cancelReset() {
+  if (resetting.value) return;
+  resetTarget.value = null;
+}
+
+async function confirmReset() {
+  if (!resetTarget.value) return;
+  resetting.value = true;
+  try {
+    await resetResultForAdmin(resetTarget.value.studentId);
+    pushToast(`Reset ${resetTarget.value.name}'s test — back to Not started.`, 'info');
+    if (expandedId.value === resetTarget.value.studentId) expandedId.value = null;
+    resetTarget.value = null;
+  } catch {
+    pushToast('Could not reset this test. Please try again.', 'error');
+  } finally {
+    resetting.value = false;
+  }
+}
+
 // --- Settings tab ---
 const durationMinutes = ref(DEFAULT_DURATION_MINUTES);
 const settingsUpdatedAt = ref<number | null>(null);
@@ -78,11 +129,11 @@ onUnmounted(() => {
 });
 
 async function saveSettings() {
-  if (!auth.user) return;
+  if (!auth.id) return;
   savingSettings.value = true;
   savedMessage.value = '';
   try {
-    await updateTestConfig(durationMinutes.value, auth.user.uid);
+    await updateTestConfig(durationMinutes.value, auth.id);
     savedMessage.value = 'Saved. This only affects sessions that have not started yet.';
   } finally {
     savingSettings.value = false;
@@ -170,6 +221,9 @@ async function signOut() {
             <input v-model="showTestAccount" type="checkbox" class="rounded border-slate-300 text-primary" />
             Show test account
           </label>
+          <AppButton variant="secondary" :disabled="filteredRows.length === 0" @click="downloadPdf">
+            Download PDF
+          </AppButton>
         </div>
 
         <div class="overflow-x-auto rounded-xl bg-white shadow-sm ring-1 ring-slate-100">
@@ -180,11 +234,12 @@ async function signOut() {
                 <th class="px-4 py-2.5">Student</th>
                 <th class="px-4 py-2.5">Session</th>
                 <th class="px-4 py-2.5">Status</th>
-                <th class="px-4 py-2.5">Score</th>
+                <th class="px-4 py-2.5">Score (/100)</th>
                 <th class="px-4 py-2.5">Time taken</th>
                 <th class="px-4 py-2.5">Violations</th>
                 <th class="px-4 py-2.5">Flag</th>
                 <th class="px-4 py-2.5">Last Q</th>
+                <th class="px-4 py-2.5">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -207,7 +262,7 @@ async function signOut() {
                   <td class="px-4 py-2.5 text-slate-500">{{ row.session }}</td>
                   <td class="px-4 py-2.5"><StatusBadge :status="row.status" /></td>
                   <td class="px-4 py-2.5 tabular-nums text-slate-700">
-                    {{ row.score !== null ? `${row.score} / ${TOTAL_QUESTIONS}` : '—' }}
+                    {{ row.score ?? '—' }}
                   </td>
                   <td class="px-4 py-2.5 tabular-nums text-slate-500">{{ formatDuration(row.durationTakenMs) }}</td>
                   <td class="px-4 py-2.5 tabular-nums text-slate-500">{{ row.violationCount }}</td>
@@ -220,15 +275,37 @@ async function signOut() {
                     </span>
                   </td>
                   <td class="px-4 py-2.5 tabular-nums text-slate-500">{{ row.currentQuestionIndex + 1 }}</td>
+                  <td class="px-4 py-2.5">
+                    <div class="flex items-center gap-1">
+                      <button
+                        type="button"
+                        class="rounded-md px-2 py-1 text-xs font-semibold text-primary-dark hover:bg-primary-light"
+                        :disabled="row.status === 'not_started'"
+                        :class="row.status === 'not_started' ? 'cursor-not-allowed opacity-40' : ''"
+                        @click="requestView(row)"
+                      >
+                        View
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded-md px-2 py-1 text-xs font-semibold text-danger hover:bg-danger-tint"
+                        :disabled="row.status === 'not_started'"
+                        :class="row.status === 'not_started' ? 'cursor-not-allowed opacity-40' : ''"
+                        @click="requestReset(row)"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </td>
                 </tr>
                 <tr v-if="expandedId === row.studentId">
-                  <td colspan="9" class="p-0">
+                  <td colspan="10" class="p-0">
                     <ViolationList :student-id="row.studentId" />
                   </td>
                 </tr>
               </template>
               <tr v-if="filteredRows.length === 0">
-                <td colspan="9" class="px-4 py-8 text-center text-sm text-slate-400">No students match these filters.</td>
+                <td colspan="10" class="px-4 py-8 text-center text-sm text-slate-400">No students match these filters.</td>
               </tr>
             </tbody>
           </table>
@@ -264,5 +341,34 @@ async function signOut() {
         </div>
       </template>
     </div>
+
+    <div
+      v-if="resetTarget"
+      class="fixed inset-0 z-20 flex items-center justify-center bg-slate-900/50 px-4"
+    >
+      <div class="w-full max-w-sm rounded-2xl bg-white p-6 shadow-lg">
+        <h3 class="text-base font-bold text-slate-900">Reset this student's test?</h3>
+        <p class="mt-1.5 text-sm text-slate-500">
+          This clears all of <strong>{{ resetTarget.name }}</strong
+          >'s answers and progress, and sets their status back to <strong>Not started</strong> so they
+          can retake the test. Their past violation log is kept for the record. This cannot be undone.
+        </p>
+        <div class="mt-5 flex gap-2">
+          <AppButton variant="secondary" full-width :disabled="resetting" @click="cancelReset">
+            Cancel
+          </AppButton>
+          <AppButton variant="danger" full-width :disabled="resetting" @click="confirmReset">
+            {{ resetting ? 'Resetting…' : 'Reset test' }}
+          </AppButton>
+        </div>
+      </div>
+    </div>
+
+    <StudentResultModal
+      v-if="viewTarget"
+      :student-id="viewTarget.studentId"
+      :name="viewTarget.name"
+      @close="viewTarget = null"
+    />
   </main>
 </template>

@@ -3,12 +3,14 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
   runTransaction,
   setDoc,
   updateDoc,
+  writeBatch,
 } from 'firebase/firestore';
 
 import { MAX_VIOLATIONS } from '@/constants';
@@ -26,6 +28,7 @@ const DEFAULT_RESULT: ResultDoc = {
   durationMinutes: null,
   violationCount: 0,
   flaggedForCheating: false,
+  optionOrder: null,
 };
 
 function resultRef(uid: string) {
@@ -95,7 +98,11 @@ export async function updateCurrentQuestionIndex(uid: string, index: number): Pr
   await updateDoc(resultRef(uid), { currentQuestionIndex: index });
 }
 
-export async function startTestSession(uid: string, durationMinutes: number): Promise<void> {
+export async function startTestSession(
+  uid: string,
+  durationMinutes: number,
+  optionOrder: Record<number, AnswerLetter[]>,
+): Promise<void> {
   const now = Date.now();
   await updateDoc(resultRef(uid), {
     status: 'in_progress',
@@ -103,6 +110,7 @@ export async function startTestSession(uid: string, durationMinutes: number): Pr
     testStartTimestamp: now,
     durationMinutes,
     currentQuestionIndex: 0,
+    optionOrder,
   });
 }
 
@@ -158,6 +166,21 @@ export async function recordViolation(
 
     return { violationCount, locked };
   });
+}
+
+/** Admin-only: wipes a student's answers and resets their result doc back to
+ * a clean 'not_started' state, as if they'd never begun — used when a
+ * student needs a genuine re-take (e.g. a device crash). Deliberately does
+ * NOT delete the violations subcollection: that log is append-only (the
+ * Firestore rules refuse update/delete on it) so a prior attempt's cheating
+ * evidence survives a reset instead of being erasable by resetting. */
+export async function resetResultForAdmin(uid: string): Promise<void> {
+  const answerDocs = await getDocs(answersCollection(uid));
+
+  const batch = writeBatch(db);
+  answerDocs.forEach((d) => batch.delete(d.ref));
+  batch.set(resultRef(uid), DEFAULT_RESULT);
+  await batch.commit();
 }
 
 export function subscribeViolations(

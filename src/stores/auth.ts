@@ -1,75 +1,77 @@
-import type { User } from 'firebase/auth';
-import { onAuthStateChanged } from 'firebase/auth';
 import { defineStore } from 'pinia';
 
-import { checkIsAdmin } from '@/firebase/admins';
-import { signInAdmin, signInStudent, signOutUser } from '@/firebase/auth';
-import { auth } from '@/firebase/config';
+import { checkAdminExists } from '@/firebase/admins';
+import { signInAdmin, signInStudent } from '@/firebase/auth';
 import { getStudentProfile } from '@/firebase/students';
+import { clearSession, loadSession, saveSession } from '@/lib/session';
 import type { StudentProfile } from '@/types';
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
-    user: null as User | null,
+    id: null as string | null,
+    role: null as 'student' | 'admin' | null,
     studentProfile: null as StudentProfile | null,
-    isAdmin: false,
     ready: false,
     /** Transient: confirming identity doesn't persist across a refresh — that's fine, since status is still 'not_started' at that point and nothing has been saved yet. */
     identityConfirmed: false,
   }),
   getters: {
-    isSignedIn: (state): boolean => state.user !== null,
+    isSignedIn: (state): boolean => state.id !== null,
+    isAdmin: (state): boolean => state.role === 'admin',
   },
   actions: {
+    /** Restores a locally-persisted session (see src/lib/session.ts) and
+     * re-validates it still exists in Firestore before trusting it. */
     async init(): Promise<void> {
-      return new Promise<void>((resolve) => {
-        onAuthStateChanged(auth, async (user) => {
-          this.user = user;
-          if (user) {
-            await this.loadProfile(user.uid);
+      const stored = loadSession();
+      if (stored) {
+        if (stored.role === 'student') {
+          const profile = await getStudentProfile(stored.id);
+          if (profile) {
+            this.id = stored.id;
+            this.role = 'student';
+            this.studentProfile = profile;
           } else {
-            this.studentProfile = null;
-            this.isAdmin = false;
+            clearSession();
           }
-          this.ready = true;
-          resolve();
-        });
-      });
-    },
-
-    async loadProfile(uid: string): Promise<void> {
-      const [profile, admin] = await Promise.all([getStudentProfile(uid), checkIsAdmin(uid)]);
-      this.studentProfile = profile;
-      this.isAdmin = admin;
+        } else {
+          const exists = await checkAdminExists(stored.id);
+          if (exists) {
+            this.id = stored.id;
+            this.role = 'admin';
+          } else {
+            clearSession();
+          }
+        }
+      }
+      this.ready = true;
     },
 
     async loginStudent(username: string, password: string): Promise<void> {
-      const cred = await signInStudent(username, password);
-      this.user = cred.user;
-      await this.loadProfile(cred.user.uid);
+      const { id } = await signInStudent(username, password);
+      const profile = await getStudentProfile(id);
+      this.id = id;
+      this.role = 'student';
+      this.studentProfile = profile;
+      saveSession({ id, role: 'student' });
     },
 
-    async loginAdmin(email: string, password: string): Promise<void> {
-      const cred = await signInAdmin(email, password);
-      this.user = cred.user;
-      await this.loadProfile(cred.user.uid);
-      if (!this.isAdmin) {
-        await signOutUser();
-        this.user = null;
-        this.studentProfile = null;
-        throw new Error('This account does not have admin access.');
-      }
+    async loginAdmin(username: string, password: string): Promise<void> {
+      const { id } = await signInAdmin(username, password);
+      this.id = id;
+      this.role = 'admin';
+      saveSession({ id, role: 'admin' });
     },
 
     confirmIdentity(): void {
       this.identityConfirmed = true;
     },
 
-    async logout(): Promise<void> {
-      await signOutUser();
-      this.user = null;
+    logout(): void {
+      clearSession();
+      this.id = null;
+      this.role = null;
       this.studentProfile = null;
-      this.isAdmin = false;
       this.identityConfirmed = false;
     },
   },

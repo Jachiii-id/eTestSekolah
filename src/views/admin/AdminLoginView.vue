@@ -8,23 +8,23 @@ import { useAuthStore } from '@/stores/auth';
 const auth = useAuthStore();
 const router = useRouter();
 
-const email = ref('');
+const username = ref('');
 const password = ref('');
 const errorMessage = ref('');
 const submitting = ref(false);
 
 async function handleSubmit() {
   errorMessage.value = '';
-  if (!email.value.trim() || !password.value) {
-    errorMessage.value = 'Enter your admin email and password.';
+  if (!username.value.trim() || !password.value) {
+    errorMessage.value = 'Enter your admin username and password.';
     return;
   }
   submitting.value = true;
   try {
-    await auth.loginAdmin(email.value, password.value);
+    await auth.loginAdmin(username.value, password.value);
     await router.push({ name: 'admin-dashboard' });
   } catch {
-    errorMessage.value = 'Incorrect credentials, or this account does not have admin access.';
+    errorMessage.value = 'Incorrect username or password.';
   } finally {
     submitting.value = false;
   }
@@ -46,11 +46,11 @@ async function handleSubmit() {
 
       <form class="space-y-4" @submit.prevent="handleSubmit">
         <div>
-          <label for="email" class="mb-1 block text-sm font-medium text-slate-700">Email</label>
+          <label for="username" class="mb-1 block text-sm font-medium text-slate-700">Username</label>
           <input
-            id="email"
-            v-model="email"
-            type="email"
+            id="username"
+            v-model="username"
+            type="text"
             autocomplete="username"
             class="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
           />

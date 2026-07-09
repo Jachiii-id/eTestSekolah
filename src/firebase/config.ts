@@ -1,5 +1,4 @@
 import { type FirebaseApp, initializeApp } from 'firebase/app';
-import { type Auth, getAuth } from 'firebase/auth';
 import {
   type Firestore,
   initializeFirestore,
@@ -17,7 +16,6 @@ const firebaseConfig = {
 };
 
 export const app: FirebaseApp = initializeApp(firebaseConfig);
-export const auth: Auth = getAuth(app);
 
 // Persistent offline cache: answers/progress writes made while offline (flaky
 // lab wifi) queue in IndexedDB and flush automatically on reconnect — no

@@ -32,6 +32,9 @@ export interface ResultDoc {
   durationMinutes: number | null;
   violationCount: number;
   flaggedForCheating: boolean;
+  /** Per-student, locked-in-at-start display order of each question's
+   * options (see src/lib/optionShuffle.ts). Null until the student starts. */
+  optionOrder: Record<number, AnswerLetter[]> | null;
 }
 
 export interface AnswerDoc {

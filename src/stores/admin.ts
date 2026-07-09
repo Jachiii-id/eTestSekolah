@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
-import { subscribeAllResults, subscribeAllStudents } from '@/firebase/adminData';
+import { getStudentProfilesByIds, subscribeAllResults } from '@/firebase/adminData';
 import type { ResultDoc, StudentProfile, TestStatus } from '@/types';
 
 const DEFAULT_RESULT: ResultDoc = {
@@ -14,6 +14,7 @@ const DEFAULT_RESULT: ResultDoc = {
   durationMinutes: null,
   violationCount: 0,
   flaggedForCheating: false,
+  optionOrder: null,
 };
 
 export interface AdminRow {
@@ -34,28 +35,41 @@ export const useAdminStore = defineStore('admin', () => {
   const students = ref<Record<string, StudentProfile>>({});
   const results = ref<Record<string, ResultDoc>>({});
 
-  let studentsUnsub: (() => void) | null = null;
   let resultsUnsub: (() => void) | null = null;
+  let stopProfileWatch: (() => void) | null = null;
 
   function init(): void {
     teardown();
-    studentsUnsub = subscribeAllStudents((s) => {
-      students.value = s;
-    });
     resultsUnsub = subscribeAllResults((r) => {
       results.value = r;
     });
+    // `results` is listable (drives the roster); `students` is get-only (no
+    // bulk dump of usernames/passwords/tokens), so profiles are fetched one
+    // id at a time, only for ids we haven't already resolved.
+    stopProfileWatch = watch(
+      results,
+      async (r) => {
+        const missingIds = Object.keys(r).filter((id) => !(id in students.value));
+        if (missingIds.length === 0) return;
+        const fetched = await getStudentProfilesByIds(missingIds);
+        students.value = { ...students.value, ...fetched };
+      },
+      { immediate: true },
+    );
   }
 
   function teardown(): void {
-    studentsUnsub?.();
     resultsUnsub?.();
-    studentsUnsub = null;
+    stopProfileWatch?.();
     resultsUnsub = null;
+    stopProfileWatch = null;
+    students.value = {};
+    results.value = {};
   }
 
   const rows = computed<AdminRow[]>(() => {
-    return Object.keys(students.value)
+    return Object.keys(results.value)
+      .filter((id) => id in students.value)
       .map((id): AdminRow => {
         const student = students.value[id]!;
         const result = results.value[id] ?? DEFAULT_RESULT;

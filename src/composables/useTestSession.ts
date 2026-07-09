@@ -25,8 +25,8 @@ export function useTestSession() {
     storeToRefs(store);
 
   onMounted(async () => {
-    if (auth.user) {
-      await store.init(auth.user.uid);
+    if (auth.id) {
+      await store.init(auth.id);
     }
   });
 
@@ -35,12 +35,31 @@ export function useTestSession() {
   });
 
   const totalQuestions = QUESTIONS.length;
+  const DEFAULT_ORDER: AnswerLetter[] = ['A', 'B', 'C', 'D'];
 
   const currentIndex = computed(() => result.value.currentQuestionIndex);
   const currentQuestion = computed(() => QUESTIONS[currentIndex.value] ?? QUESTIONS[0]!);
   const currentAnswer = computed<AnswerLetter | undefined>(
     () => answers.value[currentQuestion.value.number],
   );
+
+  /** Display order for the current question's options, locked in for this
+   * student at test-start (see optionOrder on the result doc). Each entry's
+   * `position` is the on-screen A/B/C/D label; `originalLetter` is the real
+   * identity used for saving/scoring, so a shuffled UI never changes what
+   * gets recorded. */
+  const currentOptions = computed(() => {
+    const order =
+      result.value.optionOrder?.[currentQuestion.value.number] ?? DEFAULT_ORDER;
+    return DEFAULT_ORDER.map((position, i) => {
+      const originalLetter = order[i] ?? position;
+      return {
+        position,
+        originalLetter,
+        text: currentQuestion.value.options[originalLetter],
+      };
+    });
+  });
 
   const timeRemainingLabel = computed(() =>
     remainingSeconds.value === null ? '--:--' : formatClock(remainingSeconds.value),
@@ -83,6 +102,7 @@ export function useTestSession() {
     currentIndex,
     currentQuestion,
     currentAnswer,
+    currentOptions,
     answeredCount,
     progressPercent,
     timeRemainingLabel,

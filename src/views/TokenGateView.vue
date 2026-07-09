@@ -23,7 +23,7 @@ async function handleSubmit() {
   }
   checking.value = true;
   try {
-    const uid = auth.user!.uid;
+    const uid = auth.id!;
     const valid = await verifyPersonalToken(uid, token.value);
     if (!valid) {
       errorMessage.value = 'That token doesn’t match our records. Check with your teacher.';

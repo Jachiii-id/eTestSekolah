@@ -35,7 +35,7 @@ async function handleSubmit() {
       await router.push({ name: 'admin-dashboard' });
       return;
     }
-    const result = await getResultDocOnce(auth.user!.uid);
+    const result = await getResultDocOnce(auth.id!);
     await router.push({ name: resolveRoute(result.status) });
   } catch (err) {
     errorMessage.value =
@@ -70,7 +70,7 @@ async function handleSubmit() {
             type="text"
             autocomplete="username"
             class="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-            placeholder="e.g. auliasalim"
+            placeholder="username"
           />
         </div>
         <div>
@@ -93,13 +93,6 @@ async function handleSubmit() {
           {{ submitting ? 'Signing in…' : 'Sign in' }}
         </AppButton>
       </form>
-
-      <p class="mt-6 text-center text-xs text-slate-400">
-        Admin?
-        <router-link :to="{ name: 'admin-login' }" class="font-medium text-primary-dark hover:underline">
-          Go to admin login
-        </router-link>
-      </p>
     </div>
   </main>
 </template>

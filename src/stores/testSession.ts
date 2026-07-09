@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 
+import { TOTAL_QUESTIONS } from '@/constants';
 import { getTestConfig } from '@/firebase/settings';
 import {
   ensureResultDoc,
@@ -12,6 +13,7 @@ import {
   subscribeResultDoc,
   updateCurrentQuestionIndex,
 } from '@/firebase/results';
+import { generateOptionOrder } from '@/lib/optionShuffle';
 import { computeScore } from '@/lib/scoring';
 import type { AnswerLetter, ResultDoc, TestStatus, ViolationType } from '@/types';
 
@@ -25,6 +27,7 @@ const DEFAULT_RESULT: ResultDoc = {
   durationMinutes: null,
   violationCount: 0,
   flaggedForCheating: false,
+  optionOrder: null,
 };
 
 export const useTestSessionStore = defineStore('testSession', () => {
@@ -112,7 +115,9 @@ export const useTestSessionStore = defineStore('testSession', () => {
   async function beginTest(): Promise<void> {
     if (!uid.value) return;
     const config = await getTestConfig();
-    await startTestSession(uid.value, config.durationMinutes);
+    const questionNumbers = Array.from({ length: TOTAL_QUESTIONS }, (_, i) => i + 1);
+    const optionOrder = generateOptionOrder(questionNumbers);
+    await startTestSession(uid.value, config.durationMinutes, optionOrder);
   }
 
   async function selectAnswer(questionNumber: number, letter: AnswerLetter): Promise<void> {

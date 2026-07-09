@@ -81,8 +81,8 @@ router.beforeEach(async (to) => {
     if (!auth.isSignedIn) return { name: 'login' };
     if (auth.isAdmin) return { name: 'admin-dashboard' };
 
-    await ensureResultDoc(auth.user!.uid);
-    const resultDoc = await getResultDocOnce(auth.user!.uid);
+    await ensureResultDoc(auth.id!);
+    const resultDoc = await getResultDocOnce(auth.id!);
     const target = resolveStudentRoute(resultDoc.status, auth.identityConfirmed);
     if (target !== to.name) return { name: target };
     return true;
@@ -91,7 +91,7 @@ router.beforeEach(async (to) => {
   // Public routes: bounce an already-authenticated user straight to where they belong.
   if (to.name === 'login' && auth.isSignedIn) {
     if (auth.isAdmin) return { name: 'admin-dashboard' };
-    const resultDoc = await getResultDocOnce(auth.user!.uid);
+    const resultDoc = await getResultDocOnce(auth.id!);
     return { name: resolveStudentRoute(resultDoc.status, auth.identityConfirmed) };
   }
   if (to.name === 'admin-login' && auth.isSignedIn && auth.isAdmin) {
