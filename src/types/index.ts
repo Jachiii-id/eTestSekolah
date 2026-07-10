@@ -7,6 +7,8 @@ export interface Question {
   text: string;
   options: Record<AnswerLetter, string>;
   correctAnswer: AnswerLetter;
+  /** Reading passage shown above the question, for reading-comprehension items. */
+  passage?: string;
 }
 
 export type SessionLabel = 'Session 1' | 'Session 2';

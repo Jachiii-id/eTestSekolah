@@ -2,6 +2,16 @@ import type { Question } from '@/types';
 
 // Parsed from English_Placement_Test_SMP_TEACHER.md — verified against the
 // answer-key summary table (Part 1/2/3), zero mismatches.
+
+const SCHOOL_EVENTS_PASSAGE =
+  "Every year, SDN Mekar Jaya holds special events for its students. The school year begins in July and ends in June. In August, the school celebrates Independence Day with a flag ceremony and fun games.\n\n" +
+  "In September, the school holds a Science Fair where students display their projects. The students' favorite event, however, is Sports Day, which is always held on the third Saturday of October. This year, Sports Day falls on October 17th.\n\n" +
+  "Fajar's birthday is on May 5th, and he always invites his friends to a small party at home. His best friend, Nadia, was born in January, the first month of the year.";
+
+const DITO_PASSAGE =
+  "Last Sunday, October 4th, Dito went to the traditional market with his mother. They bought a loaf of bread, a bottle of milk, and a bar of chocolate for the family. At a food stall, Dito ordered a bowl of bakso for 5,000 rupiahs. The bakso tasted a little salty, but it was delicious.\n\n" +
+  "Before they went home, Dito's mother bought a new pair of trousers and a blue tie for his school uniform, because his old uniform was too small. On the way home, Dito said his stomach felt strange. That night, he had a stomachache and could not eat dinner. His mother gave him warm tea and let him rest.";
+
 export const QUESTIONS: Question[] = [
   {
     number: 1,
@@ -404,7 +414,8 @@ export const QUESTIONS: Question[] = [
       C: "In August",
       D: "In September"
     },
-    correctAnswer: "B"
+    correctAnswer: "B",
+    passage: SCHOOL_EVENTS_PASSAGE
   },
   {
     number: 32,
@@ -417,7 +428,8 @@ export const QUESTIONS: Question[] = [
       C: "September",
       D: "October"
     },
-    correctAnswer: "B"
+    correctAnswer: "B",
+    passage: SCHOOL_EVENTS_PASSAGE
   },
   {
     number: 33,
@@ -430,7 +442,8 @@ export const QUESTIONS: Question[] = [
       C: "October 27th",
       D: "October 3rd"
     },
-    correctAnswer: "B"
+    correctAnswer: "B",
+    passage: SCHOOL_EVENTS_PASSAGE
   },
   {
     number: 34,
@@ -443,7 +456,8 @@ export const QUESTIONS: Question[] = [
       C: "September",
       D: "November"
     },
-    correctAnswer: "C"
+    correctAnswer: "C",
+    passage: SCHOOL_EVENTS_PASSAGE
   },
   {
     number: 35,
@@ -456,7 +470,8 @@ export const QUESTIONS: Question[] = [
       C: "May 15th",
       D: "October 5th"
     },
-    correctAnswer: "B"
+    correctAnswer: "B",
+    passage: SCHOOL_EVENTS_PASSAGE
   },
   {
     number: 36,
@@ -469,7 +484,8 @@ export const QUESTIONS: Question[] = [
       C: "October 14th",
       D: "November 4th"
     },
-    correctAnswer: "B"
+    correctAnswer: "B",
+    passage: DITO_PASSAGE
   },
   {
     number: 37,
@@ -482,7 +498,8 @@ export const QUESTIONS: Question[] = [
       C: "15,000 rupiahs",
       D: "50,000 rupiahs"
     },
-    correctAnswer: "B"
+    correctAnswer: "B",
+    passage: DITO_PASSAGE
   },
   {
     number: 38,
@@ -495,7 +512,8 @@ export const QUESTIONS: Question[] = [
       C: "Salty",
       D: "Bitter"
     },
-    correctAnswer: "C"
+    correctAnswer: "C",
+    passage: DITO_PASSAGE
   },
   {
     number: 39,
@@ -508,7 +526,8 @@ export const QUESTIONS: Question[] = [
       C: "It was his birthday",
       D: "The school asked for a new color"
     },
-    correctAnswer: "B"
+    correctAnswer: "B",
+    passage: DITO_PASSAGE
   },
   {
     number: 40,
@@ -521,6 +540,7 @@ export const QUESTIONS: Question[] = [
       C: "He had a stomachache",
       D: "He bought new shoes"
     },
-    correctAnswer: "C"
+    correctAnswer: "C",
+    passage: DITO_PASSAGE
   }
 ];

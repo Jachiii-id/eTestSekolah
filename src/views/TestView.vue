@@ -121,6 +121,11 @@ function jumpToGrid(index: number) {
 
     <div class="mx-auto max-w-3xl px-4 py-6 sm:px-6">
       <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-primary/10 sm:p-8">
+        <div v-if="currentQuestion.passage" class="mb-5 rounded-xl bg-primary-light/50 p-4">
+          <p class="text-xs font-semibold uppercase tracking-wide text-primary-dark">Reading passage</p>
+          <p class="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-slate-700">{{ currentQuestion.passage }}</p>
+        </div>
+
         <p class="text-xs font-semibold uppercase tracking-wide text-primary-dark">
           Question {{ currentQuestion.number }}
         </p>
